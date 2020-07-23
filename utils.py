@@ -11,7 +11,6 @@ def generate_masks(mask_path):
     mask_s = np.sum(mask, axis=0)
     index = np.where(mask_s == 0)
     mask_s[index] = 1
-    mask_s = mask_s.astype(np.uint8)
     mask = torch.from_numpy(mask)
     mask = mask.float()
     mask = mask.cuda()
