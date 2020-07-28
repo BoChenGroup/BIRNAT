@@ -2,6 +2,7 @@ from dataLoadess import Imgdataset
 from torch.utils.data import DataLoader
 from models import forward_rnn, cnn1, backrnn
 from utils import generate_masks, time2file_name
+from gan_resnet import Discriminator
 import torch.optim as optim
 import torch.nn as nn
 import torch
@@ -11,6 +12,8 @@ import datetime
 import os
 import numpy as np
 from torch.autograd import Variable
+from torch import autograd
+from torch.nn import functional as F
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -38,8 +41,9 @@ train_data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=T
 first_frame_net = cnn1(compress_rate + 1).cuda()
 rnn1 = forward_rnn().cuda()
 rnn2 = backrnn().cuda()
+D = Discriminator(1, 256, 64, 1024)
+D.cuda()
 
-# load pretrained model
 if last_train != 0:
     first_frame_net = torch.load(
         './model/' + model_save_filename + "/first_frame_net_model_epoch_{}.pth".format(last_train))
@@ -48,6 +52,7 @@ if last_train != 0:
 
 loss = nn.MSELoss()
 loss.cuda()
+BCE_loss = nn.BCELoss().cuda()
 
 
 def test(test_path, epoch, result_path):
@@ -134,32 +139,84 @@ def train(epoch, learning_rate, result_path):
     epoch_loss = 0
     epoch_loss1 = 0
     epoch_loss2 = 0
+    Dloss = 0
+    regloss = 0
     begin = time.time()
 
     optimizer_g = optim.Adam([{'params': first_frame_net.parameters()}, {'params': rnn1.parameters()},
                               {'params': rnn2.parameters()}], lr=learning_rate)
+    optimizer_d = optim.Adam(D.parameters(), lr=learning_rate)
     if __name__ == '__main__':
         for iteration, batch in enumerate(train_data_loader):
             gt, meas = Variable(batch[0]), Variable(batch[1])
-            gt = gt.cuda().float()  # [batch,8,256,256]
-            meas = meas.cuda().float()  # [batch,256 256]
+            gt = gt.cuda()  # [batch,8,256,256]
+            gt = gt.float()
+            meas = meas.cuda()  # [batch,256 256]
+            meas = meas.float()
+
+            mini_batch = gt.size()[0]
+            y_real_ = torch.ones(mini_batch).cuda()
+            y_fake_ = torch.zeros(mini_batch).cuda()
 
             meas_re = torch.div(meas, mask_s)
             meas_re = torch.unsqueeze(meas_re, 1)
 
+            optimizer_d.zero_grad()
+
             batch_size1 = gt.shape[0]
 
-            h0 = torch.zeros(batch_size1, 20, block_size, block_size).cuda()
+            h0 = torch.zeros(batch_size1, 20, 256, 256).cuda()
 
             xt1 = first_frame_net(mask, meas_re, block_size, compress_rate)
             model_out1, h1 = rnn1(xt1, meas, mask, h0, meas_re, block_size, compress_rate)
             model_out = rnn2(model_out1, meas, mask, h1, meas_re, block_size, compress_rate)
 
+            # discriminator training
+            toggle_grad(first_frame_net, False)
+            toggle_grad(rnn1, False)
+            toggle_grad(rnn2, False)
+            toggle_grad(D, True)
+            gt.requires_grad_()
+
+            D_result = D(gt, y_real_)
+            # assert (D_result > 0.0 & D_result < 1.0).all()
+            D_real_loss = compute_loss(D_result, 1)
+            Dloss += D_result.data.mean()
+            D_real_loss.backward(retain_graph=True)
+
+            # model_out.requires_grad_()
+            # d_fake = D(model_out, y_real_)
+            # dloss_fake = compute_loss(d_fake, 0)
+
+            batch_size = gt.size(0)
+            grad_dout = autograd.grad(
+                outputs=D_result.sum(), inputs=gt,
+                create_graph=True, retain_graph=True, only_inputs=True
+            )[0]
+            grad_dout2 = grad_dout.pow(2)
+            assert (grad_dout2.size() == gt.size())
+            reg1 = grad_dout2.view(batch_size, -1).sum(1)
+
+            reg = 10 * reg1.mean()
+
+            regloss += reg.data.mean()
+
+            reg.backward(retain_graph=True)
+
+            optimizer_d.step()
+
+            # generator training
+            toggle_grad(first_frame_net, True)
+            toggle_grad(rnn1, True)
+            toggle_grad(rnn2, True)
+            toggle_grad(D, False)
             optimizer_g.zero_grad()
 
+            D_result = D(model_out, y_real_)
+            G_train_loss = compute_loss(D_result, 1)
             Loss1 = loss(model_out1, gt)
             Loss2 = loss(model_out, gt)
-            Loss = 0.5 * Loss1 + 0.5 * Loss2
+            Loss = 0.5 * Loss1 + 0.5 * Loss2 + 0.001 * G_train_loss
 
             epoch_loss += Loss.data
             epoch_loss1 += Loss1.data
@@ -174,13 +231,27 @@ def train(epoch, learning_rate, result_path):
     print("===> Epoch {} Complete: Avg. Loss: {:.7f}".format(epoch, epoch_loss / len(train_data_loader)),
           "loss1 {:.7f} loss2: {:.7f}".format(epoch_loss1 / len(train_data_loader),
                                               epoch_loss2 / len(train_data_loader)),
+          "d loss: {:.7f},reg loss: {:.7f}".format(Dloss / len(train_data_loader),
+                                                   regloss / len(train_data_loader)),
           "  time: {:.2f}".format(end - begin))
+
+
+def compute_loss(d_out, target):
+    targets = d_out.new_full(size=d_out.size(), fill_value=target)
+    loss = F.binary_cross_entropy_with_logits(d_out, targets)
+
+    return loss
 
 
 def checkpoint(epoch, model_path):
     model_out_path = './' + model_path + '/' + "first_frame_net_model_epoch_{}.pth".format(epoch)
     torch.save(first_frame_net, model_out_path)
     print("Checkpoint saved to {}".format(model_out_path))
+
+
+def toggle_grad(model, requires_grad):
+    for p in model.parameters():
+        p.requires_grad_(requires_grad)
 
 
 def checkpoint2(epoch, model_path):
@@ -192,6 +263,12 @@ def checkpoint2(epoch, model_path):
 def checkpoint3(epoch, model_path):
     model_out_path = './' + model_path + '/' + "rnn2_model_epoch_{}.pth".format(epoch)
     torch.save(rnn2, model_out_path)
+    # print("Checkpoint saved to {}".format(model_out_path))
+
+
+def checkpointD(epoch, model_path):
+    model_out_path = './' + model_path + '/' + "discriminator_model_epoch_{}.pth".format(epoch)
+    torch.save(D, model_out_path)
     # print("Checkpoint saved to {}".format(model_out_path))
 
 
@@ -211,6 +288,7 @@ def main(learning_rate):
             checkpoint(epoch, model_path)
             checkpoint2(epoch, model_path)
             checkpoint3(epoch, model_path)
+            checkpointD(epoch, model_path)
         if (epoch % 5 == 0) and (epoch < 150):
             learning_rate = learning_rate * 0.95
             print(learning_rate)
