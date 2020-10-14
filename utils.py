@@ -14,7 +14,7 @@ def generate_masks(mask_path):
     mask = torch.from_numpy(mask)
     mask = mask.float()
     mask = mask.cuda()
-    mask_s = torch.from_numpy(mask_s)
+    mask_s = torch.from_numpy(mask_s.astype(float))
     mask_s = mask_s.float()
     mask_s = mask_s.cuda()
     return mask, mask_s
