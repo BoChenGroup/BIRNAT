@@ -92,7 +92,10 @@ for ii=3:length(name_obj)
             
             n1=[num2str(num_yb),'_',name_obj(ii).name,name_frame(ll).name(1:end-4),'_',num2str(n),'.mat'];
             meas=zeros(block_size,block_size);
-            p1=jingxiang(patch_save);
+            p1=zeros(size(patch_save));
+            for iii=1:256
+                p1(:,iii,:)=patch_save(:,257-iii,:);
+            end
             for mm=1:compress_frame
                 p_1=p1(:,:,mm);
                 meas=meas+p_1.*mask(:,:,mm);
@@ -180,7 +183,10 @@ for ii=3:length(name_obj)
             
             n1=[num2str(num_yb),'_downsample_',name_obj(ii).name,name_frame(ll).name(1:end-4),'_',num2str(n),'.mat'];
             meas=zeros(block_size,block_size);
-            p1=jingxiang(patch_save);
+            p1=zeros(size(patch_save));
+            for iii=1:256
+                p1(:,iii,:)=patch_save(:,257-iii,:);
+            end
             for mm=1:compress_frame
                 p_1=p1(:,:,mm);
                 meas=meas+p_1.*mask(:,:,mm);
