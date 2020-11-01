@@ -4,7 +4,7 @@ import numpy as np
 
 
 class Discriminator(nn.Module):
-    def __init__(self, nlabels, size, nfilter=64, nfilter_max=1024):
+    def __init__(self, B,nlabels, size, nfilter=64, nfilter_max=1024):
         super().__init__()
         # self.embed_size = embed_size
         s0 = self.s0 = 4
@@ -27,7 +27,7 @@ class Discriminator(nn.Module):
                 ResnetBlock(nf0, nf1),
             ]
 
-        self.conv_img = nn.Conv2d(8, 1 * nf, 3, padding=1)
+        self.conv_img = nn.Conv2d(B, 1 * nf, 3, padding=1)
         self.resnet = nn.Sequential(*blocks)
         self.fc = nn.Linear(self.nf0 * s0 * s0, nlabels)
 

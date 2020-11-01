@@ -158,7 +158,7 @@ class backrnn(nn.Module):
         xt = torch.unsqueeze(xt, 1)
         batch_size = meas.shape[0]
         out = torch.zeros(batch_size, cs_rate, block_size, block_size).cuda()
-        out[:, cs_rate - 1, :, :] = xt
+        out[:, cs_rate - 1, :, :] = xt[:, 0, :, :]
         for i in range(cs_rate - 1):
             d1 = torch.zeros(batch_size, block_size, block_size).cuda()
             d2 = torch.zeros(batch_size, block_size, block_size).cuda()

@@ -22,10 +22,6 @@ if exist(meas_save_path,'dir')==0
    mkdir(meas_save_path);
 end
 
-
-x=[1,128,225];
-y=[1,128,256,384,512,599];
-
 num_yb=1;
 name_obj=dir([video_path,'/JPEGImages/',resolution]);
 for ii=3:length(name_obj)
@@ -37,6 +33,7 @@ for ii=3:length(name_obj)
    if x(end)<w(1)-block_size
         x=[x,w(1)-block_size];
    end
+   
    y=1:block_size/2:w(2)-block_size;
    if y(end)<w(2)-block_size
         y=[y,w(2)-block_size];

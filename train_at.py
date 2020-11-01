@@ -41,7 +41,7 @@ train_data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=T
 first_frame_net = cnn1(compress_rate + 1).cuda()
 rnn1 = forward_rnn().cuda()
 rnn2 = backrnn().cuda()
-D = Discriminator(1, 256, 64, 1024)
+D = Discriminator(compress_rate, 1, 256, 64, 1024)
 D.cuda()
 
 if last_train != 0:
