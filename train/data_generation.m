@@ -2,11 +2,12 @@ clc,clear
 close all
 
 % set DAVIS original video path
-video_path='E:\DAVIS\';
+video_path='E:\czh\Snapshot compressive-spectral imaging\video dataset\DAVIS\';
 % set your saving path
 save_path='.\';
 % load the mask
 load('mask.mat')
+save(strcat(save_path,'mask.mat'),'mask')
 
 
 resolution='480p/';
@@ -46,8 +47,8 @@ for ii=3:length(name_obj)
     if exist(meas_save_path,'dir')==0
        mkdir(meas_save_path);
     end
-    load(['mask',num2str(compress_frame),'.mat'])
-    save(strcat(save_path,'mask.mat'),'mask')
+%     load(['mask',num2str(compress_frame),'.mat'])
+    
    
    for ll=3:compress_frame:length(name_frame)-compress_frame
        
